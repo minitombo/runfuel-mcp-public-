@@ -78,48 +78,48 @@ class TokenManagerTests(unittest.TestCase):
             asyncio.run(token_manager.save_credential("MFP_COOKIE", "cookie"))
 
     def test_origin_check_accepts_canonical_https_origin_with_default_port(self):
-        with mock.patch.object(oauth_auth, "BASE_URL", "https://runfuel-mcp.vercel.app"):
-            self.assertTrue(token_manager._same_canonical_origin("https://runfuel-mcp.vercel.app"))
+        with mock.patch.object(oauth_auth, "BASE_URL", "https://example-runfuel.vercel.app"):
+            self.assertTrue(token_manager._same_canonical_origin("https://example-runfuel.vercel.app"))
             self.assertTrue(token_manager._same_canonical_origin("https://RUNFUEL-MCP.VERCEL.APP:443"))
 
     def test_origin_check_rejects_other_hosts_and_unsafe_origins(self):
-        with mock.patch.object(oauth_auth, "BASE_URL", "https://runfuel-mcp.vercel.app"):
+        with mock.patch.object(oauth_auth, "BASE_URL", "https://example-runfuel.vercel.app"):
             for origin in (
-                "http://runfuel-mcp.vercel.app",
+                "http://example-runfuel.vercel.app",
                 "https://attacker.example",
-                "https://runfuel-mcp.vercel.app.evil.example",
-                "https://runfuel-mcp.vercel.app/settings",
+                "https://example-runfuel.vercel.app.evil.example",
+                "https://example-runfuel.vercel.app/settings",
                 "null",
             ):
                 with self.subTest(origin=origin):
                     self.assertFalse(token_manager._same_canonical_origin(origin))
 
     def test_null_origin_uses_same_origin_https_referer_fallback(self):
-        with mock.patch.object(oauth_auth, "BASE_URL", "https://runfuel-mcp.vercel.app"):
+        with mock.patch.object(oauth_auth, "BASE_URL", "https://example-runfuel.vercel.app"):
             request = SimpleNamespace(headers={
-                "referer": "https://runfuel-mcp.vercel.app/settings",
-                "host": "runfuel-mcp.vercel.app",
+                "referer": "https://example-runfuel.vercel.app/settings",
+                "host": "example-runfuel.vercel.app",
                 "sec-fetch-site": "same-origin",
             })
             self.assertTrue(token_manager._valid_settings_origin(request, "null"))
 
     def test_null_origin_referer_fallback_rejects_cross_origin_or_untrusted_host(self):
-        with mock.patch.object(oauth_auth, "BASE_URL", "https://runfuel-mcp.vercel.app"):
+        with mock.patch.object(oauth_auth, "BASE_URL", "https://example-runfuel.vercel.app"):
             cases = [
-                {"referer": "https://attacker.example/settings", "host": "runfuel-mcp.vercel.app", "sec-fetch-site": "same-origin"},
-                {"referer": "http://runfuel-mcp.vercel.app/settings", "host": "runfuel-mcp.vercel.app", "sec-fetch-site": "same-origin"},
-                {"referer": "https://runfuel-mcp.vercel.app/settings", "host": "attacker.example", "sec-fetch-site": "same-origin"},
-                {"referer": "https://runfuel-mcp.vercel.app/settings", "host": "runfuel-mcp.vercel.app", "sec-fetch-site": "cross-site"},
+                {"referer": "https://attacker.example/settings", "host": "example-runfuel.vercel.app", "sec-fetch-site": "same-origin"},
+                {"referer": "http://example-runfuel.vercel.app/settings", "host": "example-runfuel.vercel.app", "sec-fetch-site": "same-origin"},
+                {"referer": "https://example-runfuel.vercel.app/settings", "host": "attacker.example", "sec-fetch-site": "same-origin"},
+                {"referer": "https://example-runfuel.vercel.app/settings", "host": "example-runfuel.vercel.app", "sec-fetch-site": "cross-site"},
             ]
             for headers in cases:
                 with self.subTest(headers=headers):
                     self.assertFalse(token_manager._valid_settings_origin(SimpleNamespace(headers=headers), "null"))
 
     def test_non_null_invalid_origin_does_not_use_referer_fallback(self):
-        with mock.patch.object(oauth_auth, "BASE_URL", "https://runfuel-mcp.vercel.app"):
+        with mock.patch.object(oauth_auth, "BASE_URL", "https://example-runfuel.vercel.app"):
             request = SimpleNamespace(headers={
-                "referer": "https://runfuel-mcp.vercel.app/settings",
-                "host": "runfuel-mcp.vercel.app",
+                "referer": "https://example-runfuel.vercel.app/settings",
+                "host": "example-runfuel.vercel.app",
                 "sec-fetch-site": "same-origin",
             })
             self.assertFalse(token_manager._valid_settings_origin(request, "https://attacker.example"))
