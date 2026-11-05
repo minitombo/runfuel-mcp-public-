@@ -1,0 +1,64 @@
+{
+  "rewrites": [
+    {
+      "source": "/mcp",
+      "destination": "/api/index?__runfuel_path=/mcp"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/index?__runfuel_path=/health"
+    },
+    {
+      "source": "/settings",
+      "destination": "/api/index?__runfuel_path=/settings"
+    },
+    {
+      "source": "/.well-known/oauth-authorization-server",
+      "destination": "/api/index?__runfuel_path=/.well-known/oauth-authorization-server"
+    },
+    {
+      "source": "/.well-known/oauth-protected-resource",
+      "destination": "/api/index?__runfuel_path=/.well-known/oauth-protected-resource"
+    },
+    {
+      "source": "/.well-known/oauth-protected-resource/mcp",
+      "destination": "/api/index?__runfuel_path=/.well-known/oauth-protected-resource/mcp"
+    },
+    {
+      "source": "/register",
+      "destination": "/api/index?__runfuel_path=/register"
+    },
+    {
+      "source": "/authorize",
+      "destination": "/api/index?__runfuel_path=/authorize"
+    },
+    {
+      "source": "/login",
+      "destination": "/api/index?__runfuel_path=/login"
+    },
+    {
+      "source": "/token",
+      "destination": "/api/index?__runfuel_path=/token"
+    },
+    {
+      "source": "/mfp/connect",
+      "destination": "/api/index?__runfuel_path=/mfp/connect"
+    },
+    {
+      "source": "/api/mobile/sync",
+      "destination": "/api/index?__runfuel_path=/api/mobile/sync"
+    },
+    {
+      "source": "/api/mobile/mfp/connect",
+      "destination": "/api/index?__runfuel_path=/api/mobile/mfp/connect"
+    },
+    {
+      "source": "/api/mobile/mfp/status",
+      "destination": "/api/index?__runfuel_path=/api/mobile/mfp/status"
+    },
+    {
+      "source": "/api/mobile/mfp/disconnect",
+      "destination": "/api/index?__runfuel_path=/api/mobile/mfp/disconnect"
+    }
+  ]
+}
