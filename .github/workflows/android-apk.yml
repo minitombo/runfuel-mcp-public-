@@ -1,0 +1,175 @@
+name: Build RunFuel Android APK
+# Build and validate the primary RunFuel Android app.
+# Rebuild the installable APK whenever app source or AI configuration changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - ".github/workflows/android-apk.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - ".github/workflows/android-apk.yml"
+
+concurrency:
+  group: runfuel-android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout RunFuel source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android platform scaffold
+        run: flutter create --platforms=android --org com.runfuel.app --project-name runfuel build_workspace
+
+      - name: Apply RunFuel Flutter source and tests
+        run: |
+          cp app/pubspec.yaml build_workspace/pubspec.yaml
+          rm -rf build_workspace/lib
+          cp -R app/lib build_workspace/lib
+          rm -rf build_workspace/test
+          mkdir -p build_workspace/test
+          cp -R app/test/. build_workspace/test/
+
+      - name: Configure Android network and keyboard support
+        working-directory: build_workspace
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          source = manifest.read_text()
+          source = re.sub(r'android:label="[^"]*"', 'android:label="RunFuel"', source, count=1)
+          if 'android:label="RunFuel"' not in source:
+              source = source.replace("<application", '<application android:label="RunFuel"', 1)
+          permission = '<uses-permission android:name="android.permission.INTERNET" />'
+          if permission not in source:
+              source = source.replace("<application", permission + "\n    <application", 1)
+          source = re.sub(
+              r'android:windowSoftInputMode="[^"]*"',
+              'android:windowSoftInputMode="adjustResize"',
+              source,
+              count=1,
+          )
+          if "android:windowSoftInputMode=" not in source:
+              source = source.replace(
+                  'android:hardwareAccelerated="true"',
+                  'android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize"',
+                  1,
+              )
+          manifest.write_text(source)
+          assert permission in source, "Android INTERNET permission missing"
+          deep_link = '<intent-filter android:autoVerify="false"><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="com.runfuel.app.runfuel" android:host="oauth2redirect" /></intent-filter>'
+          if "com.runfuel.app.runfuel" not in source:
+              source = source.replace("</activity>", deep_link + "\n            </activity>", 1)
+          manifest.write_text(source)
+          assert permission in source, "Android INTERNET permission missing"
+          assert 'android:windowSoftInputMode="adjustResize"' in source, "Keyboard resize mode missing"
+          assert 'android:scheme="com.runfuel.app.runfuel"' in source, "OAuth callback intent filter missing"
+          PY
+
+      - name: Resolve dependencies
+        working-directory: build_workspace
+        run: flutter pub get
+
+      - name: Run focused coaching logic tests
+        working-directory: build_workspace
+        # Keep the deterministic coaching calculations covered; generative AI is provided by Gemini.
+        run: timeout 45s flutter test test/coaching_calculation_engine_test.dart
+
+      - name: Run Flutter analysis
+        working-directory: build_workspace
+        run: flutter analyze
+
+      - name: Configure permanent Android app signing
+        id: signing
+        working-directory: build_workspace
+        env:
+          RUNFUEL_KEYSTORE_BASE64: ${{ secrets.RUNFUEL_KEYSTORE_BASE64 }}
+          RUNFUEL_STORE_PASSWORD: ${{ secrets.RUNFUEL_STORE_PASSWORD }}
+          RUNFUEL_KEY_ALIAS: ${{ secrets.RUNFUEL_KEY_ALIAS }}
+          RUNFUEL_KEY_PASSWORD: ${{ secrets.RUNFUEL_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RUNFUEL_KEYSTORE_BASE64:-}" ] && [ -z "${RUNFUEL_STORE_PASSWORD:-}" ] && [ -z "${RUNFUEL_KEY_ALIAS:-}" ] && [ -z "${RUNFUEL_KEY_PASSWORD:-}" ]; then
+            echo "::warning::No permanent signing secrets configured. Building with Flutter's generated debug signing for fresh test installs."
+            exit 0
+          fi
+          for name in RUNFUEL_KEYSTORE_BASE64 RUNFUEL_STORE_PASSWORD RUNFUEL_KEY_ALIAS RUNFUEL_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Signing is partially configured: $name is missing. Configure all four secrets or none."
+              exit 1
+            fi
+          done
+          printf '%s' "$RUNFUEL_KEYSTORE_BASE64" | base64 --decode > android/app/runfuel-upload-key.jks
+          test -s android/app/runfuel-upload-key.jks
+          key_info="$(keytool -list -v -keystore android/app/runfuel-upload-key.jks -storetype JKS -alias "$RUNFUEL_KEY_ALIAS" -storepass "$RUNFUEL_STORE_PASSWORD" 2>&1)" || { echo "$key_info"; echo "::error::Could not open the configured RunFuel keystore or alias."; exit 1; }
+          printf '%s\n' "$key_info" | grep -q "PrivateKeyEntry" || { echo "::error::The configured alias is not a private signing key."; exit 1; }
+          echo "Permanent RunFuel release signing key verified."
+          cat > android/key.properties <<EOF
+          storePassword=$RUNFUEL_STORE_PASSWORD
+          keyPassword=$RUNFUEL_KEY_PASSWORD
+          keyAlias=$RUNFUEL_KEY_ALIAS
+          storeFile=app/runfuel-upload-key.jks
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          nl = chr(10)
+          gradle = Path("android/app/build.gradle.kts")
+          source = gradle.read_text()
+          if 'create("release")' not in source:
+              source = "import java.util.Properties" + nl * 2 + source
+              marker = "android {" + nl
+              signing = "android {" + nl + "    signingConfigs {" + nl + "        create(\"release\") {" + nl + "            keyAlias = keystoreProperties[\"keyAlias\"] as String" + nl + "            keyPassword = keystoreProperties[\"keyPassword\"] as String" + nl + "            storeFile = rootProject.file(keystoreProperties[\"storeFile\"] as String)" + nl + "            storePassword = keystoreProperties[\"storePassword\"] as String" + nl + "        }" + nl + "    }" + nl
+              if marker not in source:
+                  raise SystemExit("Could not find Android Gradle configuration block")
+              source = source.replace(marker, signing, 1)
+              properties = nl + "val keystoreProperties = Properties()" + nl + "val keystorePropertiesFile = rootProject.file(\"key.properties\")" + nl + "keystoreProperties.load(keystorePropertiesFile.inputStream())" + nl * 2
+              source = source.replace("android {", properties + "android {", 1)
+          source = source.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("release")')
+          if 'signingConfig = signingConfigs.getByName("release")' not in source:
+              source = source.replace("buildTypes {", "buildTypes {" + nl + "        getByName(\"release\") {" + nl + "            signingConfig = signingConfigs.getByName(\"release\")" + nl + "        }", 1)
+          gradle.write_text(source)
+          if 'signingConfig = signingConfigs.getByName("release")' not in source:
+              raise SystemExit("Release signing configuration was not applied")
+          PY
+      - name: Build ARM64 release APK
+        working-directory: build_workspace
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Name the downloadable APK
+        run: cp build_workspace/build/app/outputs/flutter-apk/app-release.apk RunFuel-Android-ARM64.apk
+
+      - name: Verify installable APK
+        run: test -s RunFuel-Android-ARM64.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RunFuel-Android-ARM64
+          path: RunFuel-Android-ARM64.apk
+          if-no-files-found: error
+          retention-days: 14
