@@ -26,3 +26,15 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+coverage/
+**/android/local.properties
+**/android/key.properties
+**/*.jks
+**/*.keystore

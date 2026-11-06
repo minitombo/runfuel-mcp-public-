@@ -1,6 +1,6 @@
-# RunFuel MCP
+# RunFuel — Android app & MCP server
 
-A self-hosted remote [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that connects Garmin Connect and MyFitnessPal data to AI assistants such as Claude and other clients that support remote MCP.
+RunFuel combines a Flutter Android training, nutrition and coaching app with an optional self-hosted remote [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that connects Garmin Connect and MyFitnessPal data to AI assistants such as Claude and other clients that support remote MCP.
 
 RunFuel MCP is designed for people who want their own private data connection. You deploy your own instance, connect your own accounts, and provide your own hosting and storage credentials. **There is no shared RunFuel server and no maintainer account or database to connect to.**
 
@@ -56,9 +56,15 @@ Replace `YOUR-DOMAIN` with the HTTPS domain assigned to your own Vercel deployme
 
 The mode is selected for the whole deployment with `MFP_AUTH_MODE=native` or `MFP_AUTH_MODE=cookie`. It is not selected independently for each user.
 
-## RunFuel AI app — in development
+## RunFuel Android app
 
-A separate full RunFuel Android app is in development. The planned app experience brings training, nutrition, sleep/recovery and coaching together, with optional Google Gemini coaching. Each person will use their **own Google AI Studio API key**; no shared Gemini key is included in this repository. The app is separate from this MCP server and is not required to self-host or use RunFuel MCP.
+The repository now includes the public Flutter source for the RunFuel Android app in [app/](app/). It brings training plans, Garmin activity and recovery data, MyFitnessPal nutrition, food diary review, and coaching into one Android client. The app can be used independently of the MCP server; connecting a self-hosted RunFuel backend is optional for local features.
+
+- [Android app overview and setup](app/README.md)
+- [Build the Android ARM64 APK with GitHub Actions](app/BUILD.md)
+- [AI coaching, data sharing and privacy](app/AI_OPTIONS.md)
+
+The included GitHub Actions workflow runs Flutter tests and analysis, then builds a downloadable ARM64 APK. Permanent signing is optional for public builds: configure your own signing secrets to produce an APK that can update your existing installation. Without those secrets, the workflow produces a debug-signed artifact for fresh installs only. No signing keys, API keys or personal account credentials are included in the source.
 
 ## Requirements
 
