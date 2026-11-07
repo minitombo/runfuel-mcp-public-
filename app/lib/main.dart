@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'data/runfuel_database.dart';
+import 'data/number_formatting.dart';
 import 'data/planned_workouts_panel.dart';
 import 'data/training_data_service.dart';
 import 'data/backend_health_service.dart';
 import 'data/mobile_connection_service.dart';
 import 'data/sleep_recovery_panel.dart';
+import 'data/runfuel_dashboard_page.dart';
 import 'data/training_nutrition_insights_panel.dart';
 import 'data/training_lifecycle_panel.dart';
 import 'data/background_sync_service.dart';
@@ -184,6 +186,7 @@ class _RunFuelShellState extends State<RunFuelShell> {
     'Training',
     'AI Coach',
     'Nutrition',
+    'Dashboard',
     'Health profile',
     'Settings',
   ];
@@ -193,7 +196,7 @@ class _RunFuelShellState extends State<RunFuelShell> {
     final authorised = await MobileConnectionService().isAuthorized();
     if (!authorised) {
       if (!mounted) return;
-      setState(() => _index = 5);
+      setState(() => _index = 6);
       _pageController.animateToPage(
         5,
         duration: const Duration(milliseconds: 220),
@@ -295,7 +298,7 @@ class _RunFuelShellState extends State<RunFuelShell> {
           ],
         ),
         actions: [
-          if (_index == 0 || _index == 1 || _index == 3)
+          if (_index == 0 || _index == 1 || _index == 3 || _index == 4)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: DropdownButtonHideUnderline(
@@ -334,11 +337,14 @@ class _RunFuelShellState extends State<RunFuelShell> {
           TrainingPage(syncData: _syncData, reportingDays: _reportingDays),
           CoachPage(syncData: _syncData),
           NutritionPage(syncData: _syncData, selectedDate: _selectedDate, onDateChanged: _loadDate, reportingDays: _reportingDays),
+          RunFuelDashboardPage(selectedDate: _selectedDate, onDateChanged: _loadDate, reportingDays: _reportingDays),
           HealthPage(syncData: _syncData),
           const SettingsPage(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(labelTextStyle: WidgetStateProperty.all(const TextStyle(fontSize: 9, fontWeight: FontWeight.w600))),
+        child: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) {
           setState(() => _index = value);
@@ -350,9 +356,11 @@ class _RunFuelShellState extends State<RunFuelShell> {
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Training'),
           NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'Coach'),
           NavigationDestination(icon: Icon(Icons.restaurant_outlined), selectedIcon: Icon(Icons.restaurant), label: 'Food'),
+          NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.health_and_safety_outlined), selectedIcon: Icon(Icons.health_and_safety), label: 'Health'),
           NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Settings'),
         ],
+        ),
       ),
     );
   }
@@ -444,7 +452,7 @@ class _HomePeriodSummaryState extends State<HomePeriodSummary> {
       final data = snapshot.data!;
       final days = data['days'] as int;
       final calorieDays = data['calorie_days'] as int;
-      String amount(num value, int digits) => value.toStringAsFixed(digits);
+      String amount(num value, int digits) => formatRunFuelNumber(value, decimals: digits);
       final distance = (data['distance_km'] as num).toDouble();
       final runs = data['runs'] as int;
       final calories = (data['calories_total'] as num).toDouble();
@@ -565,7 +573,7 @@ class HomePage extends StatelessWidget {
 
   String _value(dynamic value, {int decimals = 1}) {
     if (value == null) return '--';
-    if (value is num) return value.toStringAsFixed(decimals);
+    if (value is num) return formatRunFuelNumber(value, decimals: decimals);
     return value.toString();
   }
 
@@ -2416,8 +2424,8 @@ class _NutritionPeriodSummaryState extends State<NutritionPeriodSummary> {
                         metrics[row * 2 + col].$1,
                         values[row * 2 + col].$2 == 0 ? '--' :
                           (_dailyAverage
-                            ? (values[row * 2 + col].$1 / values[row * 2 + col].$2).toStringAsFixed(1)
-                            : values[row * 2 + col].$1.toStringAsFixed(0)),
+                            ? formatRunFuelNumber(values[row * 2 + col].$1 / values[row * 2 + col].$2)
+                            : formatRunFuelNumber(values[row * 2 + col].$1)),
                         _dailyAverage ? '${metrics[row * 2 + col].$3} / logged day' : '${metrics[row * 2 + col].$3} total',
                         metrics[row * 2 + col].$4,
                       ),
@@ -2484,7 +2492,7 @@ class _NutritionPageState extends State<NutritionPage> {
   }
 
   String _num(dynamic value, {int digits = 0}) =>
-      value is num ? value.toStringAsFixed(digits) : '--';
+      value is num ? formatRunFuelNumber(value, decimals: digits) : '--';
 
   Future<void> _copyFoodMeal(Map meal, DateTime date) async {
     final lines = <String>[
@@ -2507,7 +2515,7 @@ class _NutritionPageState extends State<NutritionPage> {
       ]) {
         final value = nutrients[nutrient.$2];
         if (value is num) {
-          lines.add('${nutrient.$1}: ${_num(value, digits: 1)} ${nutrient.$3}');
+          lines.add('${nutrient.$1}: ${_num(value)} ${nutrient.$3}');
         }
       }
     }
@@ -2541,9 +2549,9 @@ class _NutritionPageState extends State<NutritionPage> {
       final value = totals?[nutrient.$2];
       final goal = goals?[nutrient.$2];
       if (value is num) {
-        final amount = '${nutrient.$1}: ${_num(value, digits: 1)} ${nutrient.$3}';
+        final amount = '${nutrient.$1}: ${_num(value)} ${nutrient.$3}';
         final goalText = goal is num
-            ? ' / ${_num(goal, digits: 1)} ${nutrient.$3} goal'
+            ? ' / ${_num(goal)} ${nutrient.$3} goal'
             : '';
         lines.add('$amount$goalText');
       }
@@ -3347,10 +3355,10 @@ class SetupAssistantPage extends StatefulWidget {
 class _SetupAssistantPageState extends State<SetupAssistantPage> {
   static const _key = 'runfuel_setup_completed_steps';
   static const _steps = [
-    ('GitHub repository', 'Use this public repository for the backend and Android app source, then deploy your own copy.', 'https://github.com/minitombo/runfuel-mcp-public-'),
+    ('GitHub repository', 'Use this public repository for the backend and Android app source, then deploy your own copy.', 'https://github.com/minitombo/runfuel-mcp-public'),
     ('Deploy with Vercel', 'Import the public repository into your own Vercel account. Review the project settings before deploying.', 'https://vercel.com/new'),
     ('Create Upstash Redis', 'Create your own Redis database, then connect it to your Vercel project using the Upstash integration. Never reuse someone else’s database.', 'https://console.upstash.com/'),
-    ('Configure environment variables', 'Follow the repository setup guide for required variables and encryption settings. Keep all values in Vercel, not in the app or GitHub.', 'https://github.com/minitombo/runfuel-mcp-public-'),
+    ('Configure environment variables', 'Follow the repository setup guide for required variables and encryption settings. Keep all values in Vercel, not in the app or GitHub.', 'https://github.com/minitombo/runfuel-mcp-public'),
     ('Connect Garmin and MyFitnessPal', 'Use your own backend Token Manager to configure credentials. Garmin and MyFitnessPal credentials must remain server-side.', null),
     ('Verify your installation', 'Enter your backend URL in RunFuel Settings and run the backend health check. Provider connectivity needs its own read-only verification.', null),
   ];
@@ -3832,7 +3840,7 @@ class _SettingsPageState extends State<SettingsPage> {
           label: Text('Guided First-Time Setup'),
         ),
         OutlinedButton.icon(
-          onPressed: () => _openExternal('https://github.com/minitombo/runfuel-mcp-public-'),
+          onPressed: () => _openExternal('https://github.com/minitombo/runfuel-mcp-public'),
           icon: const Icon(Icons.code),
           label: Text('Open Canonical GitHub Repository'),
         ),
