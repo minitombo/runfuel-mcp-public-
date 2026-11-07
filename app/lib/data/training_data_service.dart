@@ -103,6 +103,16 @@ class TrainingDataService {
             daily, const ['averageStressLevel', 'avgStressLevel']);
         await _persistRecoveryMetric(db, day, 'hrv_ms', 'ms',
             hrv, const ['lastNightAvg', 'lastNightAverage', 'hrvValue']);
+        await _persistRecoveryMetric(db, day, 'active_calories', 'kcal',
+            daily, const ['activeKilocalories', 'activeCalories', 'activeCalorieBurned', 'activeCaloriesBurned']);
+        await _persistRecoveryMetric(db, day, 'resting_calories', 'kcal',
+            daily, const ['restingKilocalories', 'restingCalories', 'restingCalorieBurned']);
+        await _persistRecoveryMetric(db, day, 'bmr_calories', 'kcal',
+            daily, const ['basalMetabolicCalories', 'basalMetabolicRateCalories', 'bmrCalories', 'basalCalories']);
+        await _persistRecoveryMetric(db, day, 'total_calories_burned', 'kcal',
+            daily, const ['totalKilocalories', 'totalCaloriesBurned', 'totalCalories', 'totalCalorieBurned']);
+        await _persistRecoveryMetric(db, day, 'weight_kg', 'kg',
+            daily, const ['weightKg', 'weightInKilograms', 'weight']);
       }
     }
 
