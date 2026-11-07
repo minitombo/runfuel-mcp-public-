@@ -158,7 +158,39 @@ class _RunFuelShellState extends State<RunFuelShell> {
   @override
   void initState() {
     super.initState();
-    _loadLastSync();
+    unawaited(_restoreAndSyncOnLaunch());
+  }
+
+  Future<void> _restoreAndSyncOnLaunch() async {
+    await _loadLastSync();
+    await _syncOnLaunch();
+  }
+
+  Future<void> _syncOnLaunch() async {
+    // Refresh the current local calendar day whenever the app is opened.
+    // Keep startup quiet: cached data remains available if the network fails.
+    if (!await MobileConnectionService().isAuthorized() || _syncing) return;
+    if (mounted) setState(() { _syncing = true; _syncError = null; });
+    try {
+      final today = DateTime.now();
+      final currentDay = DateTime(today.year, today.month, today.day);
+      final data = await MobileConnectionService().sync(date: currentDay);
+      await TrainingDataService.instance.persistSyncPayload(data);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_syncCacheKey, jsonEncode(data));
+      if (mounted) {
+        setState(() {
+          _selectedDate = currentDay;
+          _syncData = data;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _syncError = e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
   }
 
   Future<void> _loadLastSync() async {
@@ -168,12 +200,18 @@ class _RunFuelShellState extends State<RunFuelShell> {
     try {
       final data = jsonDecode(raw) as Map<String, dynamic>;
       final cachedDay = DateTime.tryParse(data['date']?.toString() ?? '');
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final cacheIsForToday = cachedDay != null &&
+          cachedDay.year == today.year &&
+          cachedDay.month == today.month &&
+          cachedDay.day == today.day;
       if (mounted) {
         setState(() {
-          _syncData = data;
-          if (cachedDay != null) {
-            _selectedDate = DateTime(cachedDay.year, cachedDay.month, cachedDay.day);
-          }
+          // Only show the cached payload when it belongs to today. Never
+          // relabel a historical payload as today's data.
+          _syncData = cacheIsForToday ? data : null;
+          _selectedDate = today;
         });
       }
     } catch (_) {
